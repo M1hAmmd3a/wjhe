@@ -3,10 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FaceCounter — واجهة مصممة</title>
-  <meta name="description" content="Fast face counter with beautiful UI — local face recognition (single count per person)" />
+  <title>FaceCounter — واجهة مصممة (مصحح + fallback رفع ملفات)</title>
+  <meta name="description" content="Face counter — works with webcam or uploaded image/video. Uses face-api.js (SSD + embeddings)." />
   <style>
-    /* ---------- Modern UI CSS (clean, minimal, but elegant) ---------- */
     :root{
       --bg:#0f1724; --card:#0b1220; --muted:#9aa6b2;
       --accent1:#7c3aed; --accent2:#06b6d4; --glass: rgba(255,255,255,0.04);
@@ -14,30 +13,23 @@
       color-scheme: dark;
     }
     *{box-sizing:border-box}
-    html,body{height:100%;margin:0;font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background:linear-gradient(180deg,var(--bg),#071022); color:#e6eef6}
-
-    /* Layout */
-    .app{display:grid;grid-template-columns: 1fr 340px;gap:24px;padding:28px;height:100vh}
+    html,body{height:100%;margin:0;font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; background:linear-gradient(180deg,var(--bg),#071022); color:#e6eef6}
+    .app{display:grid;grid-template-columns: 1fr 360px;gap:20px;padding:22px;height:100vh}
     .panel{background:linear-gradient(180deg,var(--card), rgba(4,8,14,0.8));border-radius:var(--radius);box-shadow: 0 10px 30px rgba(2,6,12,0.6);overflow:hidden;display:flex;flex-direction:column}
-
-    /* Left: camera */
-    .cam-wrap{position:relative;flex:1;display:flex;align-items:center;justify-content:center;background: radial-gradient(1000px 400px at 10% 10%, rgba(124,58,237,0.08), transparent), var(--glass-2)}
-    video#v{width:100%;height:100%;object-fit:cover;display:block}
+    .topbar{display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid rgba(255,255,255,0.02)}
+    .cam-wrap{position:relative;flex:1;display:flex;align-items:center;justify-content:center;background: radial-gradient(1000px 400px at 10% 10%, rgba(124,58,237,0.08), transparent), var(--glass-2); min-height:420px}
+    video#v, img#imgPreview{width:100%;height:100%;object-fit:cover;display:block}
     canvas#overlay{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
-    .hud{position:absolute;left:18px;top:18px;background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));padding:10px 12px;border-radius:12px;display:flex;gap:12px;align-items:center}
+    .hud{position:absolute;left:18px;top:18px;background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));padding:10px 12px;border-radius:12px;display:flex;gap:12px;align-items:center;z-index:3}
     .logo{width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,var(--accent1),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700}
-    .title{font-size:14px;font-weight:600}
     .subtitle{font-size:12px;color:var(--muted)}
 
-    /* Right: sidebar */
     .sidebar{padding:18px;gap:12px;display:flex;flex-direction:column}
     .count-card{display:flex;justify-content:space-between;align-items:center;padding:16px;border-radius:12px;background:linear-gradient(90deg, rgba(124,58,237,0.06), rgba(6,182,212,0.03));}
     .count-card .big{font-size:28px;font-weight:800}
     .controls{display:flex;gap:12px;margin-top:10px}
     button.btn{flex:1;padding:10px 12px;border-radius:10px;border:0;background:linear-gradient(90deg,var(--accent1),var(--accent2));color:#fff;font-weight:700;cursor:pointer}
     button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
-
-    /* list of assigned persons */
     .assigned-list{margin-top:12px;overflow:auto;padding-right:6px}
     .assigned-item{display:flex;gap:12px;align-items:center;padding:10px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.015), transparent);margin-bottom:8px}
     .thumb{width:56px;height:56px;border-radius:10px;background:linear-gradient(180deg,#0b1220, #081020);display:flex;align-items:center;justify-content:center;overflow:hidden}
@@ -45,18 +37,11 @@
     .meta{flex:1}
     .meta .id{font-weight:700}
     .meta .time{font-size:12px;color:var(--muted)}
-
-    /* footer/settings */
     .settings{display:flex;flex-direction:column;gap:8px;margin-top:auto}
     .range{width:100%}
     .small{font-size:12px;color:var(--muted)}
-
-    /* topbar */
-    .topbar{display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid rgba(255,255,255,0.02)}
-    .search{display:flex;gap:8px;align-items:center;background:var(--glass);padding:8px 10px;border-radius:999px}
-    .search input{background:transparent;border:0;outline:none;color:inherit}
-
-    /* responsive */
+    .fallback{display:flex;gap:8px;align-items:center;margin-top:8px}
+    input[type=file]{color:transparent}
     @media(max-width:900px){ .app{grid-template-columns:1fr; padding:12px} .sidebar{order:2} .panel{min-height:280px} }
   </style>
 </head>
@@ -68,24 +53,38 @@
           <div class="logo">FC</div>
           <div>
             <div style="font-weight:700">FaceCounter</div>
-            <div style="font-size:12px;color:var(--muted)">عد الأشخاص بسرعة - علامة خضراء لمرة واحدة</div>
+            <div class="subtitle">عد الأشخاص بسرعة — العلامة الخضراء لمرة واحدة</div>
           </div>
         </div>
-        <div class="search">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="opacity:.8"><path d="M21 21l-4.35-4.35" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="11" r="6" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <input placeholder="بحث/توضيح" />
+
+        <div style="display:flex;gap:8px;align-items:center">
+          <div class="small" id="statusText">جارٍ التحميل...</div>
         </div>
       </div>
 
-      <div class="cam-wrap" style="padding:12px">
+      <div class="cam-wrap" id="camWrap">
         <video id="v" autoplay playsinline muted></video>
+        <img id="imgPreview" style="display:none" alt="preview"/>
         <canvas id="overlay"></canvas>
+
         <div class="hud">
           <div class="logo" style="width:34px;height:34px;border-radius:8px">FC</div>
           <div>
-            <div class="title">وضع العد الحي</div>
-            <div class="subtitle">وجّه الكاميرا - سيظهر لكل شخص علامة خضراء مرة واحدة</div>
+            <div style="font-weight:700">وضع العد الحي</div>
+            <div class="subtitle">وجّه الكاميرا — أو ارفع صورة/فيديو إن لم تتوفر كاميرا</div>
           </div>
+        </div>
+
+        <!-- fallback controls -->
+        <div style="position:absolute;right:18px;top:18px; z-index:4; display:flex; gap:8px; align-items:center;">
+          <label class="small" style="color:#fff; background:rgba(0,0,0,0.25); padding:6px 8px; border-radius:8px; cursor:pointer;">
+            رفع صورة
+            <input id="fileImage" type="file" accept="image/*" style="display:none">
+          </label>
+          <label class="small" style="color:#fff; background:rgba(0,0,0,0.25); padding:6px 8px; border-radius:8px; cursor:pointer;">
+            رفع فيديو
+            <input id="fileVideo" type="file" accept="video/*" style="display:none">
+          </label>
         </div>
       </div>
     </div>
@@ -98,7 +97,7 @@
         </div>
         <div style="text-align:right">
           <div class="small">FPS: <span id="fps">--</span></div>
-          <div class="small">Templates: <span id="tplCount">0</span></div>
+          <div class="small">قوالب: <span id="tplCount">0</span></div>
         </div>
       </div>
 
@@ -117,8 +116,8 @@
       <div class="assigned-list" id="idsList"></div>
 
       <div class="settings">
-        <div class="small">سرعة المعالجة</div>
-        <input id="speed" type="range" min="40" max="160" step="10" value="80" class="range">
+        <div class="small">سرعة المعالجة (أصغر = أسرع)</div>
+        <input id="speed" type="range" min="40" max="200" step="10" value="80" class="range">
         <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
           <div class="small">حساسية التطابق</div>
           <div style="font-weight:700" id="simVal">0.45</div>
@@ -129,16 +128,22 @@
     </div>
   </div>
 
-  <!-- face-api.js + TF backend -->
+  <!-- face-api.js -->
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
   <script>
-  // ===================== Enhanced face counter (SSD + embeddings) with nice UI =====================
+  // ====== إعدادات عامة وقيم افتراضية ======
   const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models/';
+  let PROCESS_INTERVAL_MS = 80;
+  let MAX_DESCRIPTOR_DISTANCE = parseFloat(document.getElementById('sim').value);
+  const MAX_TEMPLATES_PER_LABEL = 6;
+  const ASSIGN_CONSECUTIVE = 2;
 
-  // UI elements
+  // عناصر DOM
   const video = document.getElementById('v');
+  const imgPreview = document.getElementById('imgPreview');
   const overlay = document.getElementById('overlay');
   const ctx = overlay.getContext('2d');
+  const statusText = document.getElementById('statusText');
   const countText = document.getElementById('countText');
   const fpsText = document.getElementById('fps');
   const tplCount = document.getElementById('tplCount');
@@ -146,88 +151,386 @@
   const btnReset = document.getElementById('btnReset');
   const btnPause = document.getElementById('btnPause');
   const autoAssign = document.getElementById('autoAssign');
-  const speed = document.getElementById('speed');
-  const sim = document.getElementById('sim');
+  const speedSlider = document.getElementById('speed');
+  const simSlider = document.getElementById('sim');
   const simVal = document.getElementById('simVal');
+  const fileImage = document.getElementById('fileImage');
+  const fileVideo = document.getElementById('fileVideo');
 
-  // settings (bind to UI)
-  let PROCESS_INTERVAL_MS = parseInt(speed.value,10);
-  let MAX_DESCRIPTOR_DISTANCE = parseFloat(sim.value);
-  simVal.innerText = MAX_DESCRIPTOR_DISTANCE.toFixed(2);
-  speed.addEventListener('input', ()=> PROCESS_INTERVAL_MS = parseInt(speed.value,10));
-  sim.addEventListener('input', ()=>{ MAX_DESCRIPTOR_DISTANCE = parseFloat(sim.value); simVal.innerText = MAX_DESCRIPTOR_DISTANCE.toFixed(2); });
-
-  // state
-  let labeledDescriptors = []; // {label, descriptors: [[...]] , thumbnail}
-  let faceMatcher = null; // built from labeledDescriptors
+  // الحالة
+  let labeledDescriptors = []; // { label: number, descriptors: [[...]], thumbDataUrl }
+  let faceMatcher = null;
   let assignedLabels = [];
   let nextLabel = 1;
   let running = true;
-  let lastLoop = 0, lastTime = performance.now();
+  let modelsLoaded = false;
+  let lastTime = performance.now();
 
-  // Centroid tracker (light)
-  class Tracker{ constructor(){ this.nextId=1; this.objects=new Map(); this.disappeared=new Map(); } register(c,b,l=null){ const id=this.nextId++; this.objects.set(id,{centroid:c,bbox:b,seen:1,label:l}); this.disappeared.set(id,0); return id;} deregister(id){ this.objects.delete(id); this.disappeared.delete(id);} update(rects){ if(rects.length===0){ for(const id of Array.from(this.disappeared.keys())){ const v=this.disappeared.get(id)+1; this.disappeared.set(id,v); const o=this.objects.get(id); if(o) o.seen=Math.max(0,o.seen-1); if(v>12) this.deregister(id); } return this.objects;} if(this.objects.size===0){ for(const r of rects) this.register(r.centroid,r.bbox,r.knownLabel ?? null); return this.objects;} const ids=Array.from(this.objects.keys()); const centroids=ids.map(i=>this.objects.get(i).centroid); const inputs=rects.map(r=>r.centroid); const D=Array(centroids.length).fill(0).map(()=>Array(inputs.length).fill(0)); for(let i=0;i<centroids.length;i++){ for(let j=0;j<inputs.length;j++){ const dx=centroids[i][0]-inputs[j][0]; const dy=centroids[i][1]-inputs[j][1]; D[i][j]=Math.hypot(dx,dy);} } const usedR=new Set(), usedC=new Set(); const rows=D.map((r,i)=>({min:Math.min(...r),i})).sort((a,b)=>a.min-b.min).map(x=>x.i); for(const r of rows){ let minV=Infinity,minC=-1; for(let c=0;c<D[r].length;c++){ if(usedC.has(c)) continue; if(D[r][c]<minV){ minV=D[r][c]; minC=c; } } if(minC===-1) continue; if(minV>160) continue; const id=ids[r]; const det=rects[minC]; const obj=this.objects.get(id); obj.centroid=det.centroid; obj.bbox=det.bbox; obj.seen=Math.min(20,obj.seen+1); if(det.knownLabel && !obj.label) obj.label=det.knownLabel; this.disappeared.set(id,0); usedR.add(r); usedC.add(minC);} for(let r=0;r<D.length;r++){ if(usedR.has(r)) continue; const id=ids[r]; const v=this.disappeared.get(id)+1; this.disappeared.set(id,v); const o=this.objects.get(id); if(o) o.seen=Math.max(0,o.seen-1); if(v>12) this.deregister(id);} for(let c=0;c<rects.length;c++){ if(usedC.has(c)) continue; const d=rects[c]; this.register(d.centroid,d.bbox,d.knownLabel ?? null);} return this.objects;} reset(){ this.nextId=1; this.objects.clear(); this.disappeared.clear(); }}
+  // offscreen canvas للـthumbnails
+  const thumbCanvas = document.createElement('canvas'); thumbCanvas.width = 96; thumbCanvas.height = 96;
+  const tctx = thumbCanvas.getContext('2d');
+
+  // Tracker بسيط (centroid)
+  class Tracker {
+    constructor(){ this.nextId = 1; this.objects = new Map(); this.disappeared = new Map(); }
+    register(centroid,bbox,label=null){ const id = this.nextId++; this.objects.set(id,{centroid,bbox,seen:1,label}); this.disappeared.set(id,0); return id; }
+    deregister(id){ this.objects.delete(id); this.disappeared.delete(id); }
+    update(rects){
+      if(rects.length === 0){
+        for(const id of Array.from(this.disappeared.keys())){
+          const v = this.disappeared.get(id) + 1;
+          this.disappeared.set(id, v);
+          const o = this.objects.get(id); if(o) o.seen = Math.max(0, o.seen-1);
+          if(v > 12) this.deregister(id);
+        }
+        return this.objects;
+      }
+      if(this.objects.size === 0){
+        for(const r of rects) this.register(r.centroid, r.bbox, r.knownLabel ?? null);
+        return this.objects;
+      }
+      const ids = Array.from(this.objects.keys());
+      const centroids = ids.map(i => this.objects.get(i).centroid);
+      const inputs = rects.map(r => r.centroid);
+      const D = Array(centroids.length).fill(0).map(()=>Array(inputs.length).fill(0));
+      for(let i=0;i<centroids.length;i++){
+        for(let j=0;j<inputs.length;j++){
+          const dx = centroids[i][0]-inputs[j][0], dy = centroids[i][1]-inputs[j][1];
+          D[i][j] = Math.hypot(dx,dy);
+        }
+      }
+      const usedR = new Set(), usedC = new Set();
+      const rows = D.map((r,i)=>({min:Math.min(...r), i})).sort((a,b)=>a.min-b.min).map(x=>x.i);
+      for(const r of rows){
+        let minV = Infinity, minC = -1;
+        for(let c=0;c<D[r].length;c++){
+          if(usedC.has(c)) continue;
+          if(D[r][c] < minV){ minV = D[r][c]; minC = c; }
+        }
+        if(minC === -1) continue;
+        if(minV > 160) continue;
+        const id = ids[r], det = rects[minC], obj = this.objects.get(id);
+        obj.centroid = det.centroid; obj.bbox = det.bbox; obj.seen = Math.min(20, obj.seen + 1);
+        if(det.knownLabel && !obj.label) obj.label = det.knownLabel;
+        this.disappeared.set(id, 0);
+        usedR.add(r); usedC.add(minC);
+      }
+      for(let r=0;r<D.length;r++){
+        if(usedR.has(r)) continue;
+        const id = ids[r];
+        const v = this.disappeared.get(id) + 1;
+        this.disappeared.set(id, v);
+        const o = this.objects.get(id); if(o) o.seen = Math.max(0, o.seen-1);
+        if(v > 12) this.deregister(id);
+      }
+      for(let c=0;c<rects.length;c++){
+        if(usedC.has(c)) continue;
+        const d = rects[c];
+        this.register(d.centroid, d.bbox, d.knownLabel ?? null);
+      }
+      return this.objects;
+    }
+    reset(){ this.nextId = 1; this.objects.clear(); this.disappeared.clear(); }
+  }
   const tracker = new Tracker();
 
-  // helper: update sidebar thumbnails
-  function addAssignedThumbnail(label, dataUrl){ const el = document.createElement('div'); el.className='assigned-item'; el.innerHTML = `<div class="thumb"><img src="${dataUrl}"/></div><div class="meta"><div class="id">#${label}</div><div class="time">${new Date().toLocaleTimeString()}</div></div>`; idsList.prepend(el); }
-
-  function rebuildMatcher(){ if(labeledDescriptors.length===0){ faceMatcher=null; return; } const arr = labeledDescriptors.map(e=> new faceapi.LabeledFaceDescriptors(String(e.label), e.descriptors.map(d=> Float32Array.from(d)))); faceMatcher = arr.length ? new faceapi.FaceMatcher(arr, MAX_DESCRIPTOR_DISTANCE) : null; tplCount.innerText = labeledDescriptors.length; }
-
-  // small offscreen canvas for thumbnails
-  const thumbCanvas = document.createElement('canvas'); thumbCanvas.width = 96; thumbCanvas.height = 96; const tctx = thumbCanvas.getContext('2d');
-
-  function captureThumb(box){ try{ const [x,y,w,h] = box; tctx.clearRect(0,0,96,96); tctx.drawImage(video, x, y, w, h, 0, 0, 96, 96); return thumbCanvas.toDataURL('image/jpeg',0.7);}catch(e){return null;} }
-
-  // load models & start camera
-  async function start(){ debugInfo.innerText='تحميل النماذج...'; if(tf && tf.setBackend){ try{ await tf.setBackend('webgl'); }catch(e){} await tf.ready(); } await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL); await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL); await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL); debugInfo.innerText='النماذج جاهزة. تشغيل الكاميرا...'; try{ const s = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment', width:{ ideal:1280 }, height:{ ideal:720 } }, audio:false }); video.srcObject = s; await video.play(); } catch(e){ alert('خطأ الحصول على الكاميرا: '+e.message); return; } overlay.width = video.videoWidth; overlay.height = video.videoHeight; window.addEventListener('resize', ()=>{ overlay.width = video.videoWidth; overlay.height = video.videoHeight; }); requestAnimationFrame(loop);
+  // دوال مساعدة
+  function drawBadge(x,y,text){
+    ctx.beginPath();
+    ctx.fillStyle = 'rgba(0,180,0,0.95)';
+    ctx.arc(x,y,18,0,Math.PI*2);
+    ctx.fill();
+    ctx.closePath();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, y);
   }
 
-  let lastFrame = 0; async function loop(ts){ if(!running){ requestAnimationFrame(loop); return; } if(ts - lastFrame >= PROCESS_INTERVAL_MS){ await process(); const cur = performance.now(); const fps = Math.round(1000 / Math.max(1, cur - lastTime)); lastTime = cur; document.getElementById('fps').innerText = fps; lastFrame = ts; } requestAnimationFrame(loop); }
+  function captureThumb(box){
+    try{
+      const [x,y,w,h] = box;
+      tctx.clearRect(0,0,96,96);
+      tctx.drawImage(getCurrentFrameSource(), x, y, w, h, 0, 0, 96, 96);
+      return thumbCanvas.toDataURL('image/jpeg', 0.75);
+    }catch(e){
+      return null;
+    }
+  }
 
-  async function process(){ if(video.readyState < 2) return; const options = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.34 }); const detections = await faceapi.detectAllFaces(video, options).withFaceLandmarks().withFaceDescriptors(); const w = overlay.width, h = overlay.height; const rects = []; for(const d of detections){ const box = d.detection.box; // basic filters
-    if(!d.landmarks) continue; const areaRatio = (box.width*box.height)/(w*h); if(areaRatio < 0.00003 && box.width < 12) continue; // tiny
-    // eye-distance sanity
-    const left = d.landmarks.getLeftEye(); const right = d.landmarks.getRightEye(); if(!left||!right) continue; const avg = pts=> pts.reduce((s,p)=>({x:s.x+p.x,y:s.y+p.y}),{x:0,y:0}); const aL=avg(left), aR=avg(right); const eyeDist = Math.hypot(aL.x-aR.x, aL.y-aR.y); if((eyeDist / box.width) < 0.09) continue;
-    // try find known label via faceMatcher
-    let knownLabel = null; if(faceMatcher){ const best = faceMatcher.findBestMatch(d.descriptor); if(best && best.label !== 'unknown' && best.distance <= MAX_DESCRIPTOR_DISTANCE) knownLabel = parseInt(best.label); }
-    rects.push({ centroid: [Math.floor(box.x+box.width/2), Math.floor(box.y+box.height/2)], bbox: [Math.floor(box.x),Math.floor(box.y),Math.floor(box.width),Math.floor(box.height)], knownLabel, descriptor: d.descriptor }); }
+  function getCurrentFrameSource(){
+    // إذا تعرض صورة للمعاينة (uploaded image) فنستخدمها، وإلا نستخدم الفيديو
+    if(imgPreview.style.display !== 'none') return imgPreview;
+    return video;
+  }
 
-    const objects = tracker.update(rects);
-    // draw
+  function addAssignedThumbnail(label, dataUrl){
+    const el = document.createElement('div');
+    el.className = 'assigned-item';
+    el.innerHTML = `<div class="thumb"><img src="${dataUrl}"/></div><div class="meta"><div class="id">#${label}</div><div class="time">${new Date().toLocaleTimeString()}</div></div>`;
+    idsList.prepend(el);
+  }
+
+  function rebuildMatcher(){
+    if(labeledDescriptors.length === 0){ faceMatcher = null; tplCount.innerText = '0'; return; }
+    const arr = labeledDescriptors.map(e => new faceapi.LabeledFaceDescriptors(String(e.label), e.descriptors.map(d => Float32Array.from(d))));
+    faceMatcher = arr.length ? new faceapi.FaceMatcher(arr, MAX_DESCRIPTOR_DISTANCE) : null;
+    tplCount.innerText = labeledDescriptors.length;
+  }
+
+  function addDescriptorForLabel(label, descriptor){
+    let entry = labeledDescriptors.find(e => e.label === label);
+    if(!entry){ entry = { label, descriptors: [], thumbDataUrl: null }; labeledDescriptors.push(entry); }
+    // dedupe
+    for(const d of entry.descriptors){
+      let dist = 0;
+      for(let i=0;i<d.length;i++){ const diff = d[i] - descriptor[i]; dist += diff*diff; }
+      dist = Math.sqrt(dist);
+      if(dist < 0.02) return;
+    }
+    entry.descriptors.push(Array.from(descriptor));
+    if(entry.descriptors.length > MAX_TEMPLATES_PER_LABEL) entry.descriptors.shift();
+    rebuildMatcher();
+  }
+
+  // تحديث إعدادات من الواجهه
+  speedSlider.addEventListener('input', ()=> PROCESS_INTERVAL_MS = parseInt(speedSlider.value,10));
+  simSlider.addEventListener('input', ()=> { MAX_DESCRIPTOR_DISTANCE = parseFloat(simSlider.value); simVal.innerText = MAX_DESCRIPTOR_DISTANCE.toFixed(2); rebuildMatcher(); });
+
+  // تحميل النماذج
+  async function loadModels(){
+    statusText.innerText = 'تحميل نماذج الكشف والتعرّف...';
+    if(window.tf && tf.setBackend){
+      try{ await tf.setBackend('webgl'); }catch(e){}
+      await tf.ready();
+    }
+    await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+    modelsLoaded = true;
+    statusText.innerText = 'النماذج جاهزة';
+  }
+
+  // محاولة تشغيل الكاميرا، إن فشل نفعل fallback (رفع ملف)
+  async function startCameraOrFallback(){
+    try{
+      statusText.innerText = 'طلب إذن الكاميرا...';
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      video.srcObject = stream;
+      await video.play();
+      imgPreview.style.display = 'none';
+      video.style.display = 'block';
+      overlay.width = video.videoWidth;
+      overlay.height = video.videoHeight;
+      statusText.innerText = 'الكاميرا تعمل';
+      requestAnimationFrame(loop);
+    }catch(err){
+      // لا توجد كاميرا أو رفض الإذن: نظهر واجهة الرفع
+      statusText.innerText = 'لم يتم الحصول على الكاميرا — ارفع صورة أو فيديو لتجربة';
+      showFallbackUI();
+    }
+  }
+
+  // عرض واجهة رفع بسيطة (متاحة دائماً عبر الأزرار)
+  function showFallbackUI(){
+    // لا حاجة لإجراءات إضافية — المستخدم يرى أزرار الرفع في الزاوية
+    video.style.display = 'none';
+    imgPreview.style.display = 'none';
+    overlay.width = 960; overlay.height = 540; // افتراضي
     ctx.clearRect(0,0,overlay.width,overlay.height);
-    for(const [id,obj] of objects){ const [x,y,wb,hb]=obj.bbox; ctx.strokeStyle = obj.label ? 'rgba(0,200,0,0.95)' : 'rgba(255,180,0,0.95)'; ctx.lineWidth=2; ctx.strokeRect(x,y,wb,hb); const progress = Math.min(1, obj.seen/2); const barW = Math.floor(wb*0.6); const bx = x + Math.floor((wb-barW)/2); const by = Math.max(12,y-22); ctx.fillStyle='rgba(255,255,255,0.12)'; ctx.fillRect(bx,by,barW,8); ctx.fillStyle = obj.label ? 'rgba(0,200,0,0.95)' : 'rgba(255,200,0,0.95)'; ctx.fillRect(bx,by,Math.floor(barW*progress),8); if(obj.label){ drawBadge(x + Math.floor(wb/2), Math.max(18, y-28), '#'+obj.label); } else { ctx.fillStyle='#fff'; ctx.font='bold 14px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(Math.round(obj.seen).toString(), bx + Math.floor(barW/2), by+4); }
+  }
 
-      // assign if stable
-      if(!obj.label && obj.seen >= 2){ // find nearest rect
-        let best=null,bestD=1e9; for(const r of rects){ const dx=r.centroid[0]-obj.centroid[0]; const dy=r.centroid[1]-obj.centroid[1]; const d2 = Math.hypot(dx,dy); if(d2<bestD){ bestD=d2; best=r; } }
-        if(best){ if(best.knownLabel != null){ obj.label = best.knownLabel; addDescriptorForLabel(obj.label, best.descriptor); } else { const newLabel = nextLabel++; obj.label = newLabel; assignedLabels.push(newLabel); addDescriptorForLabel(newLabel, best.descriptor); // take thumbnail
-            const thumb = captureThumb(obj.bbox); if(thumb) addAssignedThumbnail(newLabel, thumb); updateSidebar(); } }
+  // معالجة إطار فيديو/صورة واحد أو متعدد
+  let lastProcessTs = 0;
+  async function processFrameOnce(sourceElement){
+    if(!modelsLoaded) return [];
+    const options = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.34 });
+    // إذا مصدر صورة: استخدم faceapi.detectAllFaces على العنصر المناسب
+    const detections = await faceapi.detectAllFaces(sourceElement, options).withFaceLandmarks().withFaceDescriptors();
+    return detections;
+  }
+
+  // الحلقة الأساسية (يعالج إطارات الفيديو عندما يعمل)
+  async function loop(now){
+    if(!running){ requestAnimationFrame(loop); return; }
+    if(!modelsLoaded){ requestAnimationFrame(loop); return; }
+    if(video.style.display === 'block' && video.readyState >= 2){
+      if(now - lastProcessTs >= PROCESS_INTERVAL_MS){
+        await doDetectOnVideo();
+        const cur = performance.now();
+        const fps = Math.round(1000 / Math.max(1, cur - lastTime));
+        lastTime = cur;
+        fpsText.innerText = fps;
+        lastProcessTs = now;
       }
     }
+    requestAnimationFrame(loop);
+  }
+
+  async function doDetectOnVideo(){
+    const options = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.34 });
+    const results = await faceapi.detectAllFaces(video, options).withFaceLandmarks().withFaceDescriptors();
+    await handleDetections(results, video);
+  }
+
+  // معالجة الرفع كـ image
+  fileImage.addEventListener('change', async (e)=>{
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    const url = URL.createObjectURL(f);
+    imgPreview.src = url;
+    imgPreview.style.display = 'block';
+    video.style.display = 'none';
+    await new Promise(r => imgPreview.onload = r);
+    overlay.width = imgPreview.naturalWidth; overlay.height = imgPreview.naturalHeight;
+    ctx.clearRect(0,0,overlay.width,overlay.height);
+    const detections = await faceapi.detectAllFaces(imgPreview, new faceapi.SsdMobilenetv1Options({ minConfidence:0.34 })).withFaceLandmarks().withFaceDescriptors();
+    await handleDetections(detections, imgPreview);
+  });
+
+  // معالجة رفع فيديو
+  fileVideo.addEventListener('change', async (e)=>{
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    const url = URL.createObjectURL(f);
+    video.srcObject = null;
+    video.src = url;
+    video.loop = true;
+    video.muted = true;
+    video.style.display = 'block';
+    imgPreview.style.display = 'none';
+    await video.play();
+    overlay.width = video.videoWidth; overlay.height = video.videoHeight;
+    // شغّل المعالجة عبر الحلقة (loop)
+    requestAnimationFrame(loop);
+  });
+
+  // التعامل مع النتائج: رسم، تجميع، حفظ القوالب، عدم إعادة العد
+  async function handleDetections(detections, sourceElement){
+    const w = overlay.width, h = overlay.height;
+    const rects = [];
+    for(const d of detections){
+      if(!d.detection || !d.landmarks) continue;
+      const box = d.detection.box;
+      const bw = Math.floor(box.width), bh = Math.floor(box.height);
+      const x = Math.max(0, Math.floor(box.x)), y = Math.max(0, Math.floor(box.y));
+      // فلترة بسيطة
+      const areaRatio = (bw * bh) / (w * h);
+      if(areaRatio < 0.00003 && bw < 12) continue;
+      const left = d.landmarks.getLeftEye(), right = d.landmarks.getRightEye();
+      if(!left || !right) continue;
+      const avg = pts => pts.reduce((s,p)=>({x:s.x + p.x, y: s.y + p.y}), {x:0,y:0});
+      const aL = avg(left), aR = avg(right);
+      const eyeDist = Math.hypot(aL.x - aR.x, aL.y - aR.y);
+      if((eyeDist / bw) < 0.09) continue;
+      // match descriptor against stored templates (faceMatcher)
+      let knownLabel = null;
+      if(faceMatcher){
+        const best = faceMatcher.findBestMatch(d.descriptor);
+        if(best && best.label !== 'unknown' && best.distance <= MAX_DESCRIPTOR_DISTANCE) knownLabel = parseInt(best.label);
+      }
+      rects.push({ centroid: [Math.floor(x + bw/2), Math.floor(y + bh/2)], bbox: [x,y,bw,bh], knownLabel, descriptor: d.descriptor });
+    }
+
+    const objects = tracker.update(rects);
+
+    // رسم
+    ctx.clearRect(0,0,overlay.width,overlay.height);
+    for(const [id, obj] of objects){
+      const [x,y,wb,hb] = obj.bbox;
+      ctx.strokeStyle = obj.label ? 'rgba(0,200,0,0.95)' : 'rgba(255,180,0,0.95)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x,y,wb,hb);
+      const progress = Math.min(1, obj.seen / ASSIGN_CONSECUTIVE);
+      const barW = Math.floor(wb * 0.6);
+      const bx = x + Math.floor((wb - barW)/2);
+      const by = Math.max(12, y - 22);
+      ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(bx,by,barW,8);
+      ctx.fillStyle = obj.label ? 'rgba(0,200,0,0.95)' : 'rgba(255,200,0,0.95)'; ctx.fillRect(bx,by,Math.floor(barW * progress),8);
+
+      if(obj.label){
+        drawBadge(x + Math.floor(wb/2), Math.max(18, y - 28), '#' + obj.label);
+      } else {
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(Math.round(obj.seen).toString(), bx + Math.floor(barW/2), by + 4);
+      }
+
+      // assign logic
+      if(!obj.label && obj.seen >= ASSIGN_CONSECUTIVE){
+        // nearest rect
+        let best = null, bestD = Infinity;
+        for(const r of rects){
+          const dx = r.centroid[0] - obj.centroid[0], dy = r.centroid[1] - obj.centroid[1];
+          const d2 = Math.hypot(dx,dy);
+          if(d2 < bestD){ bestD = d2; best = r; }
+        }
+        if(best){
+          if(best.knownLabel != null){
+            obj.label = best.knownLabel;
+            addDescriptorForLabel(obj.label, best.descriptor);
+          } else {
+            const newLabel = nextLabel++;
+            obj.label = newLabel;
+            assignedLabels.push(newLabel);
+            addDescriptorForLabel(newLabel, best.descriptor);
+            const thumb = captureThumb(obj.bbox);
+            if(thumb) addAssignedThumbnail(newLabel, thumb);
+            updateSidebar();
+          }
+        }
+      }
+    }
+
     countText.innerText = assignedLabels.length;
   }
 
-  function captureThumb(bbox){ try{ const [x,y,w,h] = bbox; tctx.clearRect(0,0,96,96); tctx.drawImage(video, x,y,w,h,0,0,96,96); return thumbCanvas.toDataURL('image/jpeg',0.7);}catch(e){return null;} }
+  function updateSidebar(){
+    // الهذف: عرض قائمة بسيطة
+    // (لا نُعيد بناء العناصر كل مرة لو أردت تحسين الأداء...)
+    // هنا نعطي أحدث الشخص في الأعلى
+    // already done when adding thumbnails
+  }
 
-  function addAssignedThumbnail(label, dataUrl){ addAssignedThumbnail; /* wrapper above is earlier; reuse */ }
-  // fix: our earlier addAssignedThumbnail is defined; but referencing JS hoisting: do nothing
+  // دوال الأزرار
+  btnReset.addEventListener('click', ()=>{
+    labeledDescriptors.length = 0;
+    faceMatcher = null;
+    assignedLabels.length = 0;
+    nextLabel = 1;
+    tracker.reset();
+    idsList.innerHTML = '';
+    countText.innerText = '0';
+    tplCount.innerText = '0';
+    ctx.clearRect(0,0,overlay.width,overlay.height);
+    statusText.innerText = 'الذاكرة مُحوَّلة';
+  });
 
-  // addDescriptorForLabel (similar to earlier)
-  function addDescriptorForLabel(label, descriptor){ let entry = labeledDescriptors.find(e=>e.label===label); if(!entry){ entry = {label: label, descriptors: []}; labeledDescriptors.push(entry); } for(const d of entry.descriptors){ let dist=0; for(let i=0;i<d.length;i++){ const diff = d[i] - descriptor[i]; dist += diff*diff; } dist = Math.sqrt(dist); if(dist < 0.02) return; } entry.descriptors.push(Array.from(descriptor)); if(entry.descriptors.length > MAX_TEMPLATES_PER_LABEL) entry.descriptors.shift(); rebuildMatcher(); }
+  btnPause.addEventListener('click', ()=>{
+    running = !running;
+    btnPause.innerText = running ? 'إيقاف' : 'استئناف';
+  });
 
-  // small fix: recreate addAssignedThumbnail properly
-  function addAssignedThumbnail(label, dataUrl){ const el = document.createElement('div'); el.className='assigned-item'; el.innerHTML = `<div class="thumb"><img src="${dataUrl}"/></div><div class="meta"><div class="id">#${label}</div><div class="time">${new Date().toLocaleTimeString()}</div></div>`; idsList.prepend(el); }
+  // روابط رفع الملفات (مساعدة المستخدم)
+  fileImage.addEventListener('click', (e)=> e.stopPropagation());
+  fileVideo.addEventListener('click', (e)=> e.stopPropagation());
 
-  // rebuild matcher
-  function rebuildMatcher(){ if(labeledDescriptors.length ===0){ faceMatcher=null; tplCount.innerText = '0'; return; } const arr = labeledDescriptors.map(e=> new faceapi.LabeledFaceDescriptors(String(e.label), e.descriptors.map(d=> Float32Array.from(d)))); faceMatcher = new faceapi.FaceMatcher(arr, MAX_DESCRIPTOR_DISTANCE || 0.5); tplCount.innerText = labeledDescriptors.length; }
+  // التهيئة: تحميل النماذج ثم تشغيل الكاميرا أو السماح بالرفع
+  (async () => {
+    await loadModels();
+    // نحدد overlay عندما يتوفر الفيديو أو الصورة
+    video.addEventListener('loadedmetadata', ()=>{
+      overlay.width = video.videoWidth;
+      overlay.height = video.videoHeight;
+    });
+    imgPreview.addEventListener('load', ()=>{
+      overlay.width = imgPreview.naturalWidth;
+      overlay.height = imgPreview.naturalHeight;
+    });
+    // حاول تشغيل الكاميرا، إن لم ينجح فابقَ على واجهة الرفع
+    await startCameraOrFallback();
+  })();
 
-  // reset behavior
-  btnReset.addEventListener('click', ()=>{ labeledDescriptors.length=0; faceMatcher=null; assignedLabels.length=0; nextLabel=1; tracker.reset(); idsList.innerHTML=''; countText.innerText='0'; tplCount.innerText='0'; ctx.clearRect(0,0,overlay.width,overlay.height); });
-  btnPause.addEventListener('click', ()=>{ running = !running; btnPause.innerText = running ? 'إيقاف' : 'استئناف'; });
-
-  // start
-  start();
   </script>
 </body>
 </html>
